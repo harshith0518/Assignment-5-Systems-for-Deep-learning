@@ -1,9 +1,16 @@
 /*
- * attn_loops.c -- Q3a: loop reordering so the compiler can vectorise.
+ * attn_loops.c -- Q3a: reorder the loops so the compiler can vectorise.
  *
- * Placeholder: replace the body of attention() with your implementation.
- * Keep the driver (main) below unchanged. See attn_naive.c for the input and
- * output format.
+ * The naive loops walk the strided index, so nothing vectorises: the dot
+ * product is a single-accumulator reduction, and S*V reads V with stride d.
+ * Transpose K once, then put a unit-stride, dependency-free loop innermost:
+ *
+ *     S[i][:] += Q[i][k] * KT[k][:]
+ *     O[i][:] += S[i][j] * V[j][:]
+ *
+ * Both are plain axpys and gcc vectorises them at -O3 without -ffast-math.
+ * Nothing is blocked yet, so every row still streams all of KT and all of V
+ * out of L3.
  */
 #define _POSIX_C_SOURCE 200809L
 #include <math.h>
@@ -16,14 +23,75 @@
 #include <omp.h>
 #endif
 
-/* ------------------------------------------------------------------------- */
-/* attention(): write your implementation here.                               */
-/* ------------------------------------------------------------------------- */
+static void transpose(const float *src, float *dst, int N, int d)
+{
+    for (int k = 0; k < d; k++)
+        for (int i = 0; i < N; i++)
+            dst[(size_t)k * N + i] = src[(size_t)i * d + k];
+}
+
 void attention(const float *Q, const float *K, const float *V, float *O, int N, int d)
 {
-    (void)Q; (void)K; (void)V; (void)O; (void)N; (void)d;
-    printf("attn_loops: not implemented yet\n");
-    exit(0); /* no output file is written, so `make check` skips this variant */
+    const float scale = 1.0f / sqrtf((float)d);
+    float *restrict S = malloc((size_t)N * N * sizeof(float));
+    float *restrict KT = malloc((size_t)N * d * sizeof(float));
+    if (!S || !KT) {
+        fprintf(stderr, "attn_loops: out of memory\n");
+        exit(1);
+    }
+    transpose(K, KT, N, d);
+
+    /* S = Q K^T * scale. k=0 seeds the row, so no zero-fill pass. */
+    for (int i = 0; i < N; i++) {
+        float *restrict Si = S + (size_t)i * N;
+        const float *restrict qi = Q + (size_t)i * d;
+        const float q0 = qi[0];
+        for (int j = 0; j < N; j++)
+            Si[j] = q0 * KT[j];
+        for (int k = 1; k < d; k++) {
+            const float qk = qi[k];
+            const float *restrict kt = KT + (size_t)k * N;
+            for (int j = 0; j < N; j++)
+                Si[j] += qk * kt[j];
+        }
+        for (int j = 0; j < N; j++)
+            Si[j] *= scale;
+    }
+
+    /* softmax per row, unchanged */
+    for (int i = 0; i < N; i++) {
+        float *restrict row = S + (size_t)i * N;
+        float mx = row[0];
+        for (int j = 1; j < N; j++)
+            if (row[j] > mx)
+                mx = row[j];
+        float sum = 0.0f;
+        for (int j = 0; j < N; j++) {
+            row[j] = expf(row[j] - mx);
+            sum += row[j];
+        }
+        const float inv = 1.0f / sum;
+        for (int j = 0; j < N; j++)
+            row[j] *= inv;
+    }
+
+    /* O = S V, k innermost */
+    for (int i = 0; i < N; i++) {
+        const float *restrict Si = S + (size_t)i * N;
+        float *restrict oi = O + (size_t)i * d;
+        const float s0 = Si[0];
+        for (int k = 0; k < d; k++)
+            oi[k] = s0 * V[k];
+        for (int j = 1; j < N; j++) {
+            const float s = Si[j];
+            const float *restrict vj = V + (size_t)j * d;
+            for (int k = 0; k < d; k++)
+                oi[k] += s * vj[k];
+        }
+    }
+
+    free(S);
+    free(KT);
 }
 
 /* ------------------------------------------------------------------------- */

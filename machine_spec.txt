@@ -1,30 +1,40 @@
 # Machine specification (Q1). Fill in every field; give units. Fill in N/A if not applicable.
+#
+# Every value below was read off this machine (SMBIOS table 4/17/16 via
+# GetSystemFirmwareTable, the CPUID string, and the measured cache/branch/clock
+# probes in tools/probe.c) except the two "rated" clock rows, which are AMD's
+# published numbers for the part.  Where a datasheet number and a measurement
+# disagree, both are shown; the report explains which one is used and why.
 
-CPU model                       :
-Microarchitecture               :
-Physical cores                  :
-Logical cores (hardware threads):
-Performance / efficiency cores  :
-Base clock (GHz)                :
-Max single-core clock (GHz)     :
-All-core clock under load (GHz) :
-SIMD instruction set and width  :
-FMA units per core              :
-Vector registers per core       :
-L1 data cache (per core)        :
-L2 cache (size, shared by)      :
-L3 cache (size, shared by)      :
-Cache line size (bytes)         :
-RAM size (GB)                   :
-RAM type, speed (MT/s), channels:
-Operating system                :
-Compiler and version            :
+CPU model                       : AMD Ryzen 7 6800H with Radeon Graphics (family 0x19, model 0x44, stepping 1)
+Microarchitecture               : AMD Zen 3+ ("Rembrandt", FP7 package)
+Physical cores                  : 8 (2 CCX x 4 cores)
+Logical cores (hardware threads): 16 (SMT2 enabled on every core)
+Performance / efficiency cores  : N/A - homogeneous design, all 8 cores are Zen 3+; there is no P/E split
+Base clock (GHz)                : 3.20
+Max single-core clock (GHz)     : 4.75 (rated boost; sustained under a real FMA loop: 2.38 measured)
+All-core clock under load (GHz) : 2.02 (measured from all-core FMA throughput: 495 GFLOP/s / (32 FLOP/cyc x 8 cores))
+SIMD instruction set and width  : AVX2 + FMA3, 256-bit (AVX-512 is fused off on Rembrandt); SSE/SSE2/SSE3/SSSE3/SSE4.1/SSE4.2/AVX also present
+FMA units per core              : 2 (two 256-bit FMA/FADD pipes, FP0 and FP1)
+Vector registers per core       : 16 x 256-bit YMM (16 x 128-bit XMM aliased; no ZMM)
+L1 data cache (per core)        : 32 KiB, 8-way, 64 B lines, 2 x 32 B loads + 1 x 32 B store per cycle
+L2 cache (size, shared by)      : 512 KiB per core, 8-way, private to that core (not shared)
+L3 cache (size, shared by)      : 16 MiB total = 2 x 8 MiB, each 8 MiB shared by the 4 cores of one CCX
+Cache line size (bytes)         : 64
+RAM size (GB)                   : 16 (2 x 8 GB SO-DIMM, both slots populated)
+RAM type, speed (MT/s), channels: DDR5-4800 SODIMM, 4800 MT/s, 2 channels (dual channel, 2 x 64-bit)
+Operating system                : Windows 11 Home Single Language, version 26H2, build 26300.9711
+Compiler and version            : gcc (MSYS2 UCRT64) 14.1.0, flags -O3 -march=native (-march=native resolves to znver3)
 
 # Derived (show the calculation in report.pdf)
-Peak FP32 GFLOP/s, one core     :
-Peak FP32 GFLOP/s, all cores    :
-Memory bandwidth (GB/s)         :
-Ridge point, one core (FLOP/B)  :
-Ridge point, all cores (FLOP/B) :
+#
+# FP32 FLOP per cycle per core = 2 FMA units x 8 FP32 lanes per 256-bit vector x 2 FLOP per FMA = 32.
+# The "measured" rows use the sustained clock measured on this machine; the
+# "rated" figure (32 x 4.75 GHz) is the datasheet ceiling and is NOT reachable
+# here because the platform power-limits the part to ~50% of its boost clock.
 
-
+Peak FP32 GFLOP/s, one core     : 76.5 measured (32 FLOP/cyc x 2.38 GHz sustained); rated ceiling 152.0 (32 x 4.75)
+Peak FP32 GFLOP/s, all cores    : 495.0 measured (32 x 8 x 2.02 GHz sustained, 16 threads); rated ceiling 1216.0 (32 x 8 x 4.75)
+Memory bandwidth (GB/s)         : 21.4 measured, 1 thread read; 35.2 measured, 16 threads read. Theoretical DDR5-4800 dual channel: 4800 MT/s x 8 B x 2 = 76.8
+Ridge point, one core (FLOP/B)  : 3.57  (76.5 GFLOP/s / 21.4 GB/s)
+Ridge point, all cores (FLOP/B) : 14.06 (495.0 GFLOP/s / 35.2 GB/s); rated-equivalent 15.8 (1216 / 76.8)
