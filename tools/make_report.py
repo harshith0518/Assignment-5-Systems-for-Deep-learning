@@ -100,11 +100,11 @@ for v in ["naive", "loops", "tiled", "fused", "best", "omp"]:
 
 TEX = r"""\documentclass[10pt,a4paper]{article}
 \usepackage[top=1.5cm,bottom=1.4cm,left=1.7cm,right=1.7cm]{geometry}
-\usepackage{booktabs,array,multirow,graphicx,amsmath,float,longtable}
+\usepackage{booktabs,array,multirow,graphicx,amsmath,float}
 \usepackage[T1]{fontenc}
 \usepackage[font=footnotesize,labelfont=bf,skip=2pt]{caption}
 \setlength{\parindent}{0pt}
-\setlength{\parskip}{2.5pt}
+\setlength{\parskip}{2pt}
 \setlength{\tabcolsep}{4pt}
 \newcommand{\code}[1]{\texttt{\small #1}}
 \newcommand{\var}[1]{\texttt{#1}}
@@ -160,22 +160,19 @@ counts as 2\,FLOP, so a core does 32 FLOP per cycle. My FMA chain gives
 P_1 = 32\times4.29 = """ + f"{P1:.1f}" + r"""\ \text{GFLOP/s},\qquad
 P_8 = 32\times8\times3.64 = """ + f"{PA:.0f}" + r"""\ \text{GFLOP/s}
 \end{equation*}
-The bandwidth I measured over a 512\,MB buffer is """ + f"{BW1}" + r"""\,GB/s on one
-thread and """ + f"{BW16}" + r"""\,GB/s on 16 threads. DDR5-4800 dual channel is
-76.8\,GB/s in theory, so I am getting about a third of it. That gives
+Over a 512\,MB buffer I measured """ + f"{BW1}" + r"""\,GB/s on one thread and
+""" + f"{BW16}" + r"""\,GB/s on 16 threads, against 76.8\,GB/s theoretical for
+DDR5-4800 dual channel. That gives
 \begin{equation*}
 B_\text{theor} = 4800\times8\times2 = 76.8\ \text{GB/s},\quad
 R_1 = """ + f"{P1:.1f}/{BW1} = {M['ridge_1core_measured']:.2f}" + r"""\ \text{FLOP/B},\quad
 R_8 = """ + f"{PA:.0f}/{BW16} = {M['ridge_allcore_measured']:.2f}" + r"""\ \text{FLOP/B}
 \end{equation*}
 
-One thing I did not expect. I ran the same clock probe in an earlier session and
-got 2.38\,GHz on one core and 2.02\,GHz all-core, not 4.29\,GHz. The plan is
-\emph{Best performance} and the laptop was plugged in both times, so I do not
-think it is a setting. The platform seems to limit the clock depending on its
-power state. So I measured the peak again before every run and I use that
-session's value for all the percentages below. Otherwise the same code would
-look """ + f"{4.29/2.38:.1f}" + r"""$\times$ better or worse depending on the day.
+One thing I did not expect: an earlier session on the same laptop gave 2.38 and
+2.02\,GHz instead of 4.29 and 3.64\,GHz. The power plan and the supply were the
+same, so the platform seems to limit the clock by itself. I now re-measure the
+peak every session and use that value below.
 
 \section{The naive kernel}
 
@@ -215,7 +212,7 @@ here, so I left it alone for now.
 
 \section{Optimisations}
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering\scriptsize
 \caption{All my variants, one session. Each cell: time (ms) / GFLOP/s / \% of
 measured peak / speed-up over naive. Every variant passes the check, error
@@ -231,11 +228,9 @@ variant & 1024/64 & 2048/64 & 4096/64 & 4096/128 \\
 
 \textbf{(a) Loop reordering.} I transpose $K$ once, then I change the loop order
 so the inner loop is an axpy instead of a dot product. An axpy has no
-loop-carried dependency, so gcc vectorises it without \code{-ffast-math}:
-\begin{verbatim}
-S[i][:] += Q[i][k] * KT[k][:]      k outer, j inner
-O[i][:] += S[i][j] * V[j][:]       j outer, k inner
-\end{verbatim}
+loop-carried dependency, so gcc vectorises it without \code{-ffast-math}. For
+QK$^\top$ that means $k$ outer and $j$ inner, and for S~V it means $j$ outer and
+$k$ inner.
 This gave """ + f"{B[I64]/T('loops',I64):.1f}" + r"""$\times$. What still hurts is that
 nothing is blocked, so for every row I read all of $K^{\top}$ and all of $V$ again
 out of L3, about 8\,GB at $N{=}4096$. So this version is limited by L3 bandwidth,
@@ -250,11 +245,10 @@ that keeps the $d$ accumulators in registers. Three things I had to learn by
 trying:
 \begin{itemize}\itemsep0pt
 \item gcc will not keep the tile in registers. In plain C it vectorises the
-wrong axis and spills to the stack. It only works when I write the tile with
-AVX2 intrinsics.
+wrong axis and spills. It only works when I write the tile with AVX2 intrinsics.
 \item A 16\,KB row is a multiple of the L1 size, so a block of rows lands on one
-L1 set and thrashes. I padded every row by 64\,B and this variant went from
-370.6 to 307.0\,ms at 4096/64.
+L1 set and thrashes. Padding each row by 64\,B took this from 370.6 to 307.0\,ms
+at 4096/64.
 \item One store per FMA caps a kernel at half of peak. My first S~V kept the
 output tile in L1 and only reached 21\,\%. With the accumulators in registers it
 reaches """ + f"{SPK:.0f}" + r"""\,\%.
@@ -294,15 +288,14 @@ than \var{tiled} and """ + f"{T('fused',I64)/b64:.1f}" + r"""$\times$ faster tha
 
 \section{OpenMP}
 
-I parallelised the query blocks. $K^{\top}$ is built once before the parallel
-region starts. I do not need a barrier inside it: the blocks write disjoint
-$64\times d$ slices of $O$, everything they read is shared and read-only, and the
-slices are 16\,KB apart so there is no false sharing. One surprise here. With
-\code{OMP\_PROC\_BIND=close} Windows puts both threads of a 2-thread run on the
-two SMT siblings of one core, and I measured 53.9\,ms instead of 45.3\,ms. So the
-numbers in Table~\ref{tab:omp} are without binding.
+I parallelised the query blocks. $K^{\top}$ is built once before the region
+starts. No barrier is needed: blocks write disjoint $64\times d$ slices of $O$,
+everything they read is read-only, and the slices are 16\,KB apart so there is no
+false sharing. One surprise: with \code{OMP\_PROC\_BIND=close} Windows puts both
+threads of a 2-thread run on the two SMT siblings of one core, and I got
+53.9\,ms instead of 45.3\,ms. Table~\ref{tab:omp} is without binding.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering\footnotesize
 \caption{Strong scaling. Speed-up is against the same binary at one thread.}
 \label{tab:omp}
@@ -339,7 +332,7 @@ softmax in the FLOPs. For the bytes I counted what each kernel actually needs:
 \end{equation*}
 which are (naive, loops, tiled), (fused) and (best, omp) in that order.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering\footnotesize
 \caption{Every variant at $N{=}4096,d{=}64$ against the roofline.}
 \label{tab:roof}
@@ -351,9 +344,9 @@ variant & AI (FLOP/B) & ms & GFLOP/s & \% of relevant peak \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
-\includegraphics[width=0.84\linewidth]{plots/roofline.png}
+\includegraphics[width=0.70\linewidth]{plots/roofline.png}
 \caption{My roofline at $N{=}4096,d{=}64$.}
 \label{fig:roof}
 \end{figure}
@@ -376,68 +369,14 @@ against the all-core roof it reaches """ + f"{po:.0f}" + r"""\,\%.
 \section*{How I did all this}
 
 The handout \var{Makefile} is unchanged. My laptop has no \var{make} (the MSYS2
-one cannot start its signal pipe here) and no \var{clang}, so I ran everything
+one cannot start its signal pipe here) and no \var{clang}, so everything ran
 through \var{tools/bench.py}, which does the same steps with gcc 14.1.0 and runs
 the same check rule. \code{-march=native} picks \var{znver3}, the same ISA the
 Makefile would pick with clang. Every number is the median of 5 runs after one
-warm-up. I kept all the tables in one session because the clock moves between
-sessions. I only used \var{libm}, \var{immintrin.h} and \var{omp.h}, no BLAS or
-other math library. The driver in each file is untouched from
-\var{attn\_naive.c}. \var{results.csv} has 40 rows, including every thread count.
-
-\section*{Checking it against the handout}
-
-{\footnotesize
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{6.0cm}
-                    >{\raggedright\arraybackslash}p{7.6cm}l@{}}
-\caption{What the handout asked for and where I did it.}
-\label{tab:audit}\\
-\toprule
-Requirement & What I did & Where \\
-\midrule
-\endfirsthead
-\toprule
-Requirement & What I did & Where \\
-\midrule
-\endhead
-\bottomrule
-\endfoot
-\var{machine\_spec.txt}: all fields, cores incl.\ P/E, clocks, SIMD, caches,
-memory size and type & Filled everything from SMBIOS and CPUID, then measured
-the parts I could. P/E is none, the design is homogeneous. & Table~\ref{tab:machine} \\
-\addlinespace
-Q1: peak FP32 for one and all cores, bandwidth, ridge point, with calculations &
-Showed the arithmetic for $P_1$, $P_8$, $B$ and both ridges. & \S1 \\
-\addlinespace
-Q2: time, GFLOP/s, \% of peak per input; effect of $N$ and $d$; where the time
-goes & Table~\ref{tab:naive} has both peak columns, then I wrote two paragraphs
-on $N$ and $d$ and timed the three steps. & \S2 \\
-\addlinespace
-Q3: the same measurements as Q2 plus speed-up; \var{make check} passes; what
-limits each variant & Table~\ref{tab:all} gives time, GFLOP/s, \% of peak and
-speed-up for every input. All six pass. Every variant has a limit sentence. &
-  \S3 \\
-\addlinespace
-Q3(a--d): reorder loops, cache and register tiling, fuse so $N\times N$ is never
-stored, maximum single-threaded & Axpy interchange, then a $4\times16$ YMM tile,
-then one score row in L1 with no $N^2$ allocation, then query blocking plus an
-AVX2 exp. & \S3(a)--(d) \\
-\addlinespace
-``No BLAS or other math libraries'' & I only included \var{libm},
-\var{immintrin.h} and \var{omp.h}. & last section \\
-\addlinespace
-Q4: OpenMP, several thread counts, time, speed-up, efficiency, scaling
-explained & Ran 1, 2, 4, 8 and 16 threads, then explained the clock and SMT
-limits. & Table~\ref{tab:omp} \\
-\addlinespace
-Q5: roofline from Q1 numbers, every variant at $N{=}4096,d{=}64$, intensity
-computation, limiting factor & Table~\ref{tab:roof} and Figure~\ref{fig:roof},
-with the byte counts and one limit per variant. & \S5 \\
-\addlinespace
-Submission structure; \var{results.csv} rows for each thread count &
-Kept the structure exactly. \var{results.csv} has 40 rows. & repository \\
-\end{longtable}
-}
+warm-up, and all tables come from one session because the clock moves. I only
+used \var{libm}, \var{immintrin.h} and \var{omp.h}. The driver in each file is
+untouched from \var{attn\_naive.c}, and \var{results.csv} has 40 rows including
+every thread count.
 
 \end{document}
 """
