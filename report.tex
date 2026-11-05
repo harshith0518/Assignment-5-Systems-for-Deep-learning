@@ -21,10 +21,10 @@ gcc 14.1.0, \code{-O3 -march=native}. All numbers measured on this machine.}
 
 \noindent\rule{\linewidth}{0.4pt}
 \small
-At $N{=}4096,d{=}64$ the naive kernel runs at 1.70\,GFLOP/s.
-The final single-threaded kernel runs at 51.9\,GFLOP/s, a
-30$\times$ speed-up. Sixteen threads reach
-251\,GFLOP/s, a 148$\times$ speed-up.
+At $N{=}4096,d{=}64$ the naive kernel runs at 3.12\,GFLOP/s.
+The final single-threaded kernel runs at 89.8\,GFLOP/s, a
+29$\times$ speed-up. Sixteen threads reach
+406\,GFLOP/s, a 130$\times$ speed-up.
 All variants pass the check.\par
 \noindent\rule{\linewidth}{0.4pt}
 \normalsize
@@ -42,7 +42,7 @@ I read the specification from SMBIOS and CPUID. I measured the limits with
 \toprule
 CPU & AMD Ryzen 7 6800H, Zen 3+ (family 0x19, model 0x44) \\
 Cores / threads & 8 physical, 16 logical, 2 CCX $\times$ 4 cores. No P/E split. \\
-Clock & 3.20\,GHz base, 4.75\,GHz rated boost. \textbf{Measured 2.38\,GHz 1-core, 2.02\,GHz all-core.} \\
+Clock & 3.20\,GHz base, 4.75\,GHz rated boost. \textbf{Measured 4.29\,GHz 1-core, 3.64\,GHz all-core.} \\
 SIMD & AVX2 + FMA3, 256-bit, 2 FMA units per core, 16 YMM registers. No AVX-512. \\
 Caches & L1D 32\,KiB/core, L2 512\,KiB/core, L3 16\,MiB (8\,MiB per CCX), 64\,B lines. \\
 Memory & 16\,GB DDR5-4800 SO-DIMM, 2 channels. DRAM latency 144\,ns. \\
@@ -53,25 +53,25 @@ Memory & 16\,GB DDR5-4800 SO-DIMM, 2 channels. DRAM latency 144\,ns. \\
 Zen~3+ retires two 256-bit FMAs per cycle per core. One FMA is 8 lanes
 $\times$ 2\,FLOP, so $P_\text{core}=32f$:
 \begin{equation*}
-P_1 = 32\times2.38 = 76.5\ \text{GFLOP/s},\qquad
-P_8 = 32\times8\times2.02 = 495\ \text{GFLOP/s}
+P_1 = 32\times4.29 = 134.4\ \text{GFLOP/s},\qquad
+P_8 = 32\times8\times3.64 = 932\ \text{GFLOP/s}
 \end{equation*}
 \begin{equation*}
 B_\text{theor} = 4800\,\text{MT/s}\times8\,\text{B}\times2 = 76.8\ \text{GB/s},\quad
-B_1 = 21.4\ \text{GB/s},\quad B_{16} = 35.2\ \text{GB/s}
+B_1 = 25.8\ \text{GB/s},\quad B_{16} = 36.0\ \text{GB/s}
 \end{equation*}
 \begin{equation*}
-R_1 = 76.5/21.4 = 3.57\ \text{FLOP/B},\qquad
-R_8 = 495/35.2 = 14.06\ \text{FLOP/B}
+R_1 = 134.4/25.8 = 5.21\ \text{FLOP/B},\qquad
+R_8 = 932/36.0 = 25.87\ \text{FLOP/B}
 \end{equation*}
 
-\textbf{The part runs at half its rated boost.} The clock settles at 2.38\,GHz,
-not 4.75\,GHz. Three checks exclude a measurement error. The OS is on the
-\emph{Best performance} overlay. The power plan allows 100\,\% processor state on
-AC. Throughput and latency-based clock estimates agree within 1\,\%. The platform
-power-limits the APU. I therefore report efficiency against the measured
-76.5\,GFLOP/s. Against the datasheet 152\,GFLOP/s
-every figure would halve.
+\textbf{The sustained clock follows the platform power state.} In this session
+the FMA kernel holds 4.29\,GHz on one core and 3.64\,GHz on all eight. An earlier
+session on the same machine held 2.38\,GHz and 2.02\,GHz: a factor of 1.8. The
+power plan is \emph{Best performance} and the machine is on AC in both cases, so
+the limit is the platform, not the settings. I therefore re-measure the peak in
+every session and use that session's value for every efficiency figure, so the
+tables here are mutually consistent.
 
 \section{Naive baseline}
 
@@ -83,23 +83,23 @@ every figure would halve.
 \toprule
 $N/d$ & time (ms) & GFLOP/s & \% measured peak & \% rated peak \\
 \midrule
-1024/64 &   138.43 &  1.94 &  2.5 &  1.3 \\
-2048/64 &   571.13 &  1.88 &  2.5 &  1.2 \\
-4096/64 &  2520.70 &  1.70 &  2.2 &  1.1 \\
-4096/128 &  7760.07 &  1.11 &  1.5 &  0.7 \\
+1024/64 &   79.02 &  3.40 &  2.5 &  2.2 \\
+2048/64 &  313.88 &  3.42 &  2.5 &  2.2 \\
+4096/64 & 1375.94 &  3.12 &  2.3 &  2.1 \\
+4096/128 & 3980.03 &  2.16 &  1.6 &  1.4 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \textbf{Scaling with $N$.} The work grows as $4N^2d$. Time grows faster. Doubling
-$N$ costs 4.1$\times$, then
+$N$ costs 4.0$\times$, then
 4.4$\times$, against the 4$\times$
 that FLOPs predict. The score matrix explains the gap. At $N{=}2048$ it is 16\,MB
 and fits the 16\,MB L3. At $N{=}4096$ it is 64\,MB, so each pass is a DRAM round
 trip.
 
 \textbf{Scaling with $d$.} Doubling $d$ costs
-3.1$\times$, not 2$\times$. Step~3
+2.9$\times$, not 2$\times$. Step~3
 walks $j$ with stride $d$. At $d{=}64$ the stride is 256\,B and a line feeds four
 floats. At $d{=}128$ it is 512\,B, so every load pulls its own line and 15 of 16
 bytes are wasted.
@@ -109,31 +109,30 @@ bytes are wasted.
 76\,\% at 4096/128. gcc will not
 vectorise it: \code{-fopt-info-vec} reports \emph{``not suitable for strided
 load''}. Each element costs a scalar load plus one step of a 4-cycle add chain.
-QK$^\top$ is vectorised but reaches only 2.4--2.8\,GFLOP/s, because one
+QK$^\top$ is vectorised but reaches only
+4.9\,GFLOP/s, because one
 accumulator serialises the reduction. Softmax is 1--4\,\% here. It becomes the
 largest term once the GEMMs are fixed.
 
 \section{Optimisation}
 
-\begin{table}[h]
-\centering\footnotesize
-\caption{All variants, one session. ms and speed-up over naive. Every variant
-PASSes the check (max relative error $1.1\times10^{-6}$ to $5.0\times10^{-6}$).}
+\begin{table}[H]
+\centering\scriptsize
+\caption{All variants, one session. Each cell: time (ms) / GFLOP/s / \% of
+measured peak / speed-up over naive. Every variant PASSes the check (max
+relative error $1.1\times10^{-6}$ to $5.0\times10^{-6}$).}
 \label{tab:all}
-\begin{tabular}{@{}lrr@{\hskip 6pt}rr@{\hskip 6pt}rr@{\hskip 6pt}rr@{}}
+\begin{tabular}{@{}lcccc@{}}
 \toprule
-& \multicolumn{2}{c}{1024/64} & \multicolumn{2}{c}{2048/64}
-& \multicolumn{2}{c}{4096/64} & \multicolumn{2}{c}{4096/128} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
-variant & ms & sp. & ms & sp. & ms & sp. & ms & sp. \\
+variant & 1024/64 & 2048/64 & 4096/64 & 4096/128 \\
 \midrule
-\texttt{loops} &   18.82 &   7.4 &   83.57 &   6.8 &  324.97 &   7.8 &  577.04 &  13.4 \\
-\texttt{tiled} &   11.52 &  12.0 &   58.80 &   9.7 &  223.18 &  11.3 &  288.93 &  26.9 \\
-\texttt{fused} &   15.62 &   8.9 &   57.47 &   9.9 &  236.12 &  10.7 &  527.09 &  14.7 \\
-\texttt{best} &    4.95 &  28.0 &   19.69 &  29.0 &   82.72 &  30.5 &  168.38 &  46.1 \\
-\texttt{omp (16 thr)} &    1.89 &  73.4 &    5.38 & 106.1 &   17.08 & 147.6 &   32.17 & 241.3 \\
+\texttt{loops} &   10.7 / 25.1 /  19 /  7.4 &   46.1 / 23.3 /  17 /  6.8 &  188.2 / 22.8 /  17 /  7.3 &  313.8 / 27.4 /  20 / 12.7 \\
+\texttt{tiled} &    6.0 / 45.0 /  33 / 13.2 &   31.7 / 33.9 /  25 /  9.9 &  115.9 / 37.0 /  28 / 11.9 &  168.9 / 50.9 /  38 / 23.6 \\
+\texttt{fused} &    8.2 / 32.8 /  24 /  9.6 &   34.0 / 31.6 /  24 /  9.2 &  131.4 / 32.7 /  24 / 10.5 &  295.4 / 29.1 /  22 / 13.5 \\
+\texttt{best} &    3.0 / 88.7 /  66 / 26.1 &   11.5 / 93.7 /  70 / 27.4 &   47.8 / 89.8 /  67 / 28.8 &   92.3 / 93.1 /  69 / 43.1 \\
+\texttt{omp} &    0.9 / 293.9 /  32 / 86.5 &    2.8 / 384.0 /  41 / 112.3 &   10.6 / 405.5 /  44 / 129.9 &   22.2 / 386.7 /  42 / 179.2 \\
 \midrule
-\texttt{naive} &  138.43 & 1.0 &  571.13 & 1.0 & 2520.70 & 1.0 & 7760.07 & 1.0 \\
+\texttt{naive} &   79.0 /  3.4 /   3 /  1.0 &  313.9 /  3.4 /   3 /  1.0 & 1375.9 /  3.1 /   2 /  1.0 & 3980.0 /  2.2 /   2 /  1.0 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -145,7 +144,7 @@ vectorises without \code{-ffast-math}:
 S[i][:] += Q[i][k] * KT[k][:]      k outer, j inner
 O[i][:] += S[i][j] * V[j][:]       j outer, k inner
 \end{verbatim}
-Result: 7.8$\times$. Nothing is blocked.
+Result: 7.3$\times$. Nothing is blocked.
 Each row re-streams all of $K^{\top}$ and $V$ from L3, about 8\,GB at
 $N{=}4096$. The kernel is L3-bound, not FP-bound.
 
@@ -162,22 +161,22 @@ the wrong axis and spills. The tile works only with AVX2 intrinsics.
 maps onto one L1 set and thrashes. 64\,B of padding per row took this variant
 from 370.6 to 307.0\,ms at 4096/64.
 \item One store per FMA caps a kernel at half of peak. Keeping the output tile in
-L1 reached 21\,\%. Register accumulators reach 62\,\%.
+L1 reached 21\,\%. Register accumulators reach 45\,\%.
 \end{itemize}
-Result: 11.3$\times$. The kernels split
-23/49/27\,\%
-(QK$^\top$/softmax/S~V). QK$^\top$ runs at 72\,\% of peak.
+Result: 11.9$\times$. The kernels split
+22/44/34\,\%
+(QK$^\top$/softmax/S~V), and QK$^\top$ runs at 71\,\% of peak.
 Two limits now dominate. Scalar \var{expf} is
-49\,\% of kernel time. A further
-57\,ms, 26\,\% of
+44\,\% of kernel time. A further
+14\,ms, 12\,\% of
 wall time, is page faults on the 67\,MB score matrix.
 
 \textbf{(c) Fusion.} Row $i$ of $O$ needs only row $i$ of $S$. I keep one score
 row in a 16\,KB L1 buffer and run the three steps over it. The $N\times N$ matrix
-is never built. Result: 10.7$\times$, which
-is \emph{behind} \var{attn\_tiled} (236 against
-223\,ms), and far behind at $d{=}128$
-(527 against 289\,ms).
+is never built. Result: 10.5$\times$, which
+is \emph{behind} \var{attn\_tiled} (131 against
+116\,ms), and far behind at $d{=}128$
+(295 against 169\,ms).
 Fusion is not a win here. It saves about 200\,MB of score traffic. It costs 4\,GB
 of L3 traffic at $d{=}64$ ($V$ re-read per row), and 8\,GB at $d{=}128$. Fusion
 removes the right bottleneck and adds a bigger one.
@@ -186,12 +185,13 @@ removes the right bottleneck and adds a bigger one.
 score tile stays in cache, so there is no 67\,MB allocation, and $V$ is read once
 per block, not once per row. Second, replace \var{expf} with an AVX2 exponential.
 Split $y=x\log_2 e$ into $n+f$ with $|f|\le0.5$, evaluate $2^f$ by a degree-5
-polynomial, and build $2^n$ from the exponent field. Measured error
-$5.1\times10^{-6}$ over $x\in[-80,0]$; 8.4$\times$ faster
-than libm (16.8\,M calls: 9.4\,ms against 78.8\,ms). Result:
-30.5$\times$, and 51.9\,GFLOP/s
-= 68\,\% of measured peak. That is
-2.7$\times$ faster than \var{tiled}.
+polynomial, and build $2^n$ from the exponent field. It is
+8.5$\times$ faster than libm (16.8\,M calls: 5.0\,ms against 42.3\,ms), and the
+kernel as a whole stays within $5.0\times10^{-6}$ of the naive reference. Result:
+28.8$\times$, and 89.8\,GFLOP/s =
+67\,\% of measured peak. That is
+2.4$\times$ faster than \var{tiled} and
+2.7$\times$ faster than \var{fused}.
 
 \section{OpenMP}
 
@@ -202,7 +202,7 @@ apart, so there is no false sharing. One caution: with
 \code{OMP\_PROC\_BIND=close}, Windows packs both threads of a 2-thread run onto
 one core (53.9 against 45.3\,ms at 4096/64). Table~\ref{tab:omp} is unpinned.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering\footnotesize
 \caption{Strong scaling. Speed-up is against this binary at one thread.}
 \label{tab:omp}
@@ -210,37 +210,37 @@ one core (53.9 against 45.3\,ms at 4096/64). Table~\ref{tab:omp} is unpinned.
 \toprule
 $N/d$ & threads & time (ms) & speed-up & eff.\ (\%) & GFLOP/s \\
 \midrule
-\multirow{5}{*}{4096/64} &  1 &    82.58 &  1.00 &  100 &   52.0 \\
- &  2 &    42.68 &  1.93 &   97 &  100.6 \\
- &  4 &    28.15 &  2.93 &   73 &  152.6 \\
- &  8 &    19.32 &  4.27 &   53 &  222.3 \\
- & 16 &    17.08 &  4.83 &   30 &  251.4 \\
+\multirow{5}{*}{4096/64} &  1 &    50.37 &  1.00 &  100 &   85.3 \\
+ &  2 &    25.29 &  1.99 &  100 &  169.8 \\
+ &  4 &    13.59 &  3.71 &   93 &  316.1 \\
+ &  8 &    10.83 &  4.65 &   58 &  396.5 \\
+ & 16 &    10.59 &  4.76 &   30 &  405.5 \\
 \midrule
-\multirow{5}{*}{4096/128} &  1 &   171.08 &  1.00 &  100 &   50.2 \\
- &  2 &    93.21 &  1.84 &   92 &   92.2 \\
- &  4 &    54.75 &  3.12 &   78 &  156.9 \\
- &  8 &    39.80 &  4.30 &   54 &  215.8 \\
- & 16 &    32.17 &  5.32 &   33 &  267.1 \\
+\multirow{5}{*}{4096/128} &  1 &    91.82 &  1.00 &  100 &   93.6 \\
+ &  2 &    49.30 &  1.86 &   93 &  174.2 \\
+ &  4 &    27.13 &  3.38 &   85 &  316.6 \\
+ &  8 &    24.90 &  3.69 &   46 &  345.0 \\
+ & 16 &    22.21 &  4.13 &   26 &  386.7 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \textbf{Up to four threads the curve is close to linear.} Eight threads give
-4.27$\times$, or
-53\,\% efficiency. The gap is
-the clock. The all-core clock is 2.02\,GHz against 2.38\,GHz, so the best possible
-8-thread result here is $8\times(2.02/2.38)={8*2.02/2.38:.1f}\times$. Sixteen
-threads give 4.83$\times$. The kernel
+4.65$\times$, or
+58\,\% efficiency. The gap is
+the clock. The all-core clock is 3.64\,GHz against 4.29\,GHz, so the best possible
+8-thread result here is $8\times(3.64/4.29)={8*3.64/4.29:.1f}\times$. Sixteen
+threads give 4.76$\times$. The kernel
 is FMA-bound and the two SMT threads of a core share its two FMA pipes. The whole
-machine reaches 495\,GFLOP/s at 16 threads, against
-$8\times76.5=612$ from the single-core peak, so SMT adds about a
+machine reaches 932\,GFLOP/s at 16 threads, against
+$8\times134.4=1075$ from the single-core peak, so SMT adds about a
 quarter. Efficiency is defined against thread count, so it falls steeply while
 time still improves.
 
 \section{Roofline}
 
-The roofline uses measured constants: 76.5\,GFLOP/s at
-21.4\,GB/s on one core. Intensity is useful FLOPs over the bytes a
+The roofline uses measured constants: 134.4\,GFLOP/s at
+25.8\,GB/s on one core. Intensity is useful FLOPs over the bytes a
 variant must move. The numerator is $4N^2d$. The softmax is charged to time, not
 FLOPs. The denominators:
 \begin{equation*}
@@ -250,7 +250,7 @@ FLOPs. The denominators:
 \end{equation*}
 for (naive, loops, tiled), (fused) and (best, omp) respectively.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering\footnotesize
 \caption{Variants at $N{=}4096,d{=}64$ against their roofline.}
 \label{tab:roof}
@@ -258,17 +258,17 @@ for (naive, loops, tiled), (fused) and (best, omp) respectively.
 \toprule
 variant & AI (FLOP/B) & ms & GFLOP/s & \% of relevant peak \\
 \midrule
-\texttt{naive} &   20.9 & 2520.70 &    1.7 &    2 \\
-\texttt{loops} &   20.9 &  324.97 &   13.2 &   17 \\
-\texttt{tiled} &   20.9 &  223.18 &   19.2 &   25 \\
-\texttt{fused} & 1024.0 &  236.12 &   18.2 &   24 \\
-\texttt{best} &   59.4 &   82.72 &   51.9 &   68 \\
-\texttt{omp (16)} &   59.4 &   17.08 &  251.4 &   51 \\
+\texttt{naive} &   20.9 & 1375.94 &    3.1 &    2 \\
+\texttt{loops} &   20.9 &  188.19 &   22.8 &   17 \\
+\texttt{tiled} &   20.9 &  115.95 &   37.0 &   28 \\
+\texttt{fused} & 1024.0 &  131.42 &   32.7 &   24 \\
+\texttt{best} &   59.4 &   47.84 &   89.8 &   67 \\
+\texttt{omp} &   59.4 &   10.59 &  405.5 &   44 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.84\linewidth]{plots/roofline.png}
 \caption{Roofline at $N{=}4096,d{=}64$.}
@@ -276,26 +276,25 @@ variant & AI (FLOP/B) & ms & GFLOP/s & \% of relevant peak \\
 \end{figure}
 
 \textbf{What limits each variant.} \var{naive} sits right of the ridge, where the
-roofline predicts 76.5\,GFLOP/s. It reaches
-2.2\,\%. Neither roof applies: the strided scalar loop
-costs one dependent add per element. \var{loops} is compute-bound by the model and
-5.8$\times$ below it; its real limit is L3
-bandwidth. \var{tiled} has a QK$^\top$ kernel at 72\,\% of
+roofline predicts 134.4\,GFLOP/s. It reaches
+2.3\,\%. Neither roof applies: the strided scalar loop costs
+one dependent add per element. \var{loops} is compute-bound by the model and
+5.9$\times$ below it; its real limit is L3
+bandwidth. \var{tiled} has a QK$^\top$ kernel at 71\,\% of
 peak, held back by \var{expf} and page faults. \var{fused} is
-287$\times$ past the ridge by
+197$\times$ past the ridge by
 the DRAM model, yet reaches only 24\,\%.
 Its limit is L3 bandwidth, one level above DRAM and invisible on this plot.
-\var{best} is at 68\,\% of peak; the rest is the softmax,
-the S~V ceiling of 62\,\%, and compulsory $V$ reads.
-\var{omp} lies above the single-core roofline, which is the signature of a kernel
-using the whole machine. Against the all-core roof it reaches
-51\,\%.
+\var{best} is at 67\,\% of peak; the rest is the softmax, the
+S~V ceiling of 45\,\%, and compulsory $V$ reads. \var{omp}
+lies above the single-core roofline, which is the signature of a kernel using the
+whole machine. Against the all-core roof it reaches 44\,\%.
 
 \section*{Conformance to the handout}
 
 {\footnotesize
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{6.0cm}
-                     >{\raggedright\arraybackslash}p{7.6cm}l@{}}
+                    >{\raggedright\arraybackslash}p{7.6cm}l@{}}
 \caption{Each handout requirement, how it is met, and where the evidence is.}
 \label{tab:audit}\\
 \toprule
@@ -313,28 +312,28 @@ memory size and type & All fields filled from SMBIOS and CPUID, then measured.
 P/E recorded as ``none, homogeneous''. & Table~\ref{tab:machine} \\
 \addlinespace
 Q1: peak FP32 for one and all cores, memory bandwidth, ridge point, with
-calculations & Three equation blocks; measured against rated stated. &
-  \S1 \\
+calculations & Three equation blocks; measured against rated stated. & \S1 \\
 \addlinespace
 Q2: time, GFLOP/s, \% of peak per input; effect of $N$ and $d$; where the time
-goes & Table~\ref{tab:naive}, both peak columns, two scaling paragraphs, phase
-split and the stride argument. & \S2 \\
+goes & Table~\ref{tab:naive} with both peak columns, two scaling paragraphs, the
+phase split and the stride argument. & \S2 \\
 \addlinespace
-Q3: same measurements plus speed-up; \var{make check} passes; what limits each
-variant & Table~\ref{tab:all}; all six PASS; one limit statement per variant. &
+Q3: the same measurements as Q2 plus speed-up; \var{make check} passes; what
+limits each variant & Table~\ref{tab:all} gives time, GFLOP/s, \% of peak and
+speed-up for every input; all six PASS; one limit statement per variant. &
   \S3 \\
 \addlinespace
 Q3(a--d): reorder loops, cache and register tiling, fuse so $N\times N$ is never
-stored, maximum single-threaded & Axpy interchange; $4\times16$ YMM tile;
-one score row in L1 with no $N^2$ allocation; query blocking plus AVX2 exp. &
+stored, maximum single-threaded & Axpy interchange; $4\times16$ YMM tile; one
+score row in L1 with no $N^2$ allocation; query blocking plus AVX2 exp. &
   \S3(a)--(d) \\
 \addlinespace
 ``No BLAS or other math libraries'' & Only \var{libm}, \var{immintrin.h} and
-\var{omp.h}. An include audit confirms it. & final note \\
+\var{omp.h}; an include audit confirms it. & final note \\
 \addlinespace
 Q4: OpenMP, several thread counts, time, speed-up, efficiency, scaling
-explained & Table~\ref{tab:omp}; the clock and SMT
-argument. & \S4 \\
+explained & Table~\ref{tab:omp} for 1--16 threads; clock and SMT argument. &
+  \S4 \\
 \addlinespace
 Q5: roofline from Q1 numbers, every variant at $N{=}4096,d{=}64$, intensity
 computation, limiting factor & Table~\ref{tab:roof}, Figure~\ref{fig:roof}, byte
@@ -353,10 +352,9 @@ numbers therefore come from \var{tools/bench.py}, which repeats the Makefile
 steps with gcc 14.1.0 and runs the same check rule.
 \code{-march=native} resolves to \var{znver3}, the ISA the Makefile would select
 with clang. Each variant reports the median of 5 runs after one warm-up. One
-table comes from one session, because the part drifts up to 25\,\% between
-sessions. Within a session the spread is about $\pm5$\,\%. Only \var{libm},
-\var{immintrin.h} and \var{omp.h} are used: no BLAS, no other math library.
-Driver code is unchanged from \var{attn\_naive.c} in all five variants.
-\var{results.csv} holds 40 rows, including every thread count.
+table comes from one session, because the sustained clock drifts up to 1.8$\times$
+between sessions. Only \var{libm}, \var{immintrin.h} and \var{omp.h} are used: no
+BLAS, no other math library. Driver code is unchanged from \var{attn\_naive.c} in
+all five variants. \var{results.csv} holds 40 rows, including every thread count.
 
 \end{document}

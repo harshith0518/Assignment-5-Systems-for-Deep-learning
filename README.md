@@ -13,24 +13,22 @@ disagree with `results.csv`.
 
 | variant | time | GFLOP/s | speed-up vs naive | what it is |
 |---|---|---|---|---|
-| `naive` | 2520.7 ms | 1.7 | 1.0x | baseline, as given |
-| `loops` | 325.0 ms | 13.2 | 7.8x | loop interchange + `K^T` so the inner loops are unit-stride axpys |
-| `tiled` | 223.2 ms | 19.2 | 11.3x | cache + register tiling of both GEMMs (4x16 YMM tile, key-blocked outer product) |
-| `fused` | 236.1 ms | 18.2 | 10.7x | the three steps fused row by row, no N×N matrix |
-| `best` | **82.7 ms** | **51.9** | **30.5x** | query blocking + AVX2 exp + both register-tiled kernels |
-| `omp` (16 thr) | **17.1 ms** | **251.4** | **147.6x** | `best` parallelised over query blocks |
+| `naive` | 1375.9 ms | 3.1 | 1.0x | baseline, as given |
+| `loops` | 188.2 ms | 22.8 | 7.3x | loop interchange + `K^T` so the inner loops are unit-stride axpys |
+| `tiled` | 115.9 ms | 37.0 | 11.9x | cache + register tiling of both GEMMs (4x16 YMM tile, key-blocked outer product) |
+| `fused` | 131.4 ms | 32.7 | 10.5x | the three steps fused row by row, no N x N matrix |
+| `best` | **47.8 ms** | **89.8** | **28.8x** | query blocking + AVX2 exp + both register-tiled kernels |
+| `omp` (16 thr) | **10.6 ms** | **405.5** | **129.9x** | `best` parallelised over query blocks |
 
-Measured FP32 peak on this machine is 76.5 GFLOP/s on one core — the part is
-power-limited to ~50 % of its 4.75 GHz rated boost (see Q1) — so `best` reaches
-68 % of peak and `omp` reaches 51 % of the 495 GFLOP/s all-core peak.
+Measured FP32 peak on this machine is 134.4 GFLOP/s on one core and 932 GFLOP/s on all eight cores, both taken in the same session as the table above, so `best` reaches 67 % of peak and `omp` reaches 44 % of the all-core peak.
 
 `fused` lands *behind* `tiled`. That is the honest result: fusion saves ~200 MB
 of score-matrix traffic but re-reads V per row (4 GB of L3 at d=64, 8 GB at
 d=128). §3.3 of the report explains it.
 
-> Run-to-run drift on this power-limited laptop is up to ~25 % between sessions,
-> so every table in the report is measured within a single session and
-> conclusions are drawn from within-session comparisons. Re-running
+> The sustained clock on this laptop follows its power state: 2.38 GHz in one
+> session, 4.29 GHz in another. The peak is therefore re-measured every session
+> and every table in the report comes from one session. Re-running
 > `python tools/bench.py run && python tools/bench.py csv && python tools/plots.py
 > && python tools/make_report.py` regenerates everything from fresh numbers.
 

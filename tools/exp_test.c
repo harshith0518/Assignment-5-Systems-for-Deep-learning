@@ -33,28 +33,33 @@ static double tnow(void)
 int main(void)
 {
     /* ---- 1. accuracy over x in [-80, 0] --------------------------------- */
-    float xs[8], ref[8], got[8];
+    float xs[8], got[8];
+    volatile float sink = 0.0f; /* stops the optimiser deleting the loop */
     double worst = 0.0, worst_at = 0.0;
     for (int i = 0; i < 2000000; i++) {
         double x = -80.0 * (double)i / 2000000.0;
         for (int l = 0; l < 8; l++)
             xs[l] = (float)x;
 #if HAVE_AVX2
-        _mm256_storeu_ps(got, exp_ps(_mm256_loadu_ps(xs)));
+        _mm256_storeu_ps(got, vexp(_mm256_loadu_ps(xs)));
 #else
         for (int l = 0; l < 8; l++)
             got[l] = expf(xs[l]);
 #endif
-        ref[0] = expf((float)x);
-        if (ref[0] > 1e-30f) {
-            double e = fabs((double)got[0] - (double)ref[0]) / (double)ref[0];
-            if (e > worst) {
-                worst = e;
-                worst_at = x;
+        for (int l = 0; l < 8; l++) {
+            float r = expf(xs[l]);
+            sink += got[l];
+            if (r > 1e-30f) {
+                double e = fabs((double)got[l] - (double)r) / (double)r;
+                if (e > worst) {
+                    worst = e;
+                    worst_at = xs[l];
+                }
             }
         }
     }
-    printf("exp accuracy over x in [-80,0]: max rel error %.3e at x=%.3f\n", worst, worst_at);
+    printf("exp accuracy over x in [-80,0]: max rel error %.3e at x=%.3f (sink %.3e)\n",
+           worst, worst_at, (double)sink);
 
     /* ---- 2. throughput: scalar expf vs softmax_row ---------------------- */
     const int N = 4096, ROWS = 4096; /* 16.8 M exps, same as N=4096 attention */
@@ -85,7 +90,7 @@ int main(void)
         row[j] = -(float)((j * 2654435761u) % 20000) / 1000.0f;
     t0 = tnow();
     for (int i = 0; i < ROWS; i++)
-        softmax_row(row, N);
+        softmax(row, N);
     double t_vec = tnow() - t0;
 
     double n = (double)ROWS * N;
