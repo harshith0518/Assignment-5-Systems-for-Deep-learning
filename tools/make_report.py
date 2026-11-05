@@ -40,7 +40,7 @@ pb = 100 * GF("best", I64) / P1
 po = 100 * GF("omp", I64, 16) / PA
 pn = 100 * GF("naive", I64) / P1
 
-# phase profiles from tools/naive_phases.c and tools/phases.c
+# phase profiles from tools/phases.c (naive and tiled modes)
 NV = {I1: (27.822, 2.447, 47.729, 77.998), I2: (108.637, 10.143, 197.327, 316.107),
       I64: (437.504, 41.842, 1318.423, 1797.769),
       I128: (916.917, 41.118, 2974.205, 3932.240)}
@@ -203,7 +203,7 @@ $j$ with stride $d$, so at $d{=}64$ a 64\,B line gives me four floats, and at
 $d{=}128$ every load pulls a line and I use 4 bytes out of 64.
 
 \textbf{Where the time goes.} I timed the three steps separately with
-\var{tools/naive\_phases.c}. S~V is """ + f"{100*NV[I1][2]/NV[I1][3]:.0f}" + r"""\,\% of
+\var{tools/phases.c}. S~V is """ + f"{100*NV[I1][2]/NV[I1][3]:.0f}" + r"""\,\% of
 the time at 1024/64 and """ + f"{100*NV[I128][2]/NV[I128][3]:.0f}" + r"""\,\% at
 4096/128. I checked with \code{-fopt-info-vec} and gcc refuses to vectorise that
 loop, it says \emph{``not suitable for strided load''}. So every element is a

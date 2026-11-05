@@ -107,7 +107,7 @@ $j$ with stride $d$, so at $d{=}64$ a 64\,B line gives me four floats, and at
 $d{=}128$ every load pulls a line and I use 4 bytes out of 64.
 
 \textbf{Where the time goes.} I timed the three steps separately with
-\var{tools/naive\_phases.c}. S~V is 61\,\% of
+\var{tools/phases.c}. S~V is 61\,\% of
 the time at 1024/64 and 76\,\% at
 4096/128. I checked with \code{-fopt-info-vec} and gcc refuses to vectorise that
 loop, it says \emph{``not suitable for strided load''}. So every element is a

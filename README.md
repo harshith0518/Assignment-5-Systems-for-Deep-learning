@@ -46,10 +46,11 @@ Measured peak is 134.4 GFLOP/s on one core and 932 GFLOP/s on all eight, so
 | `Makefile` | the handout Makefile, unmodified |
 | `tools/` | what produced the numbers — not needed to run the assignment |
 
-`tools/`: `probe.c` (clock, peak FLOPS, bandwidth, caches), `naive_phases.c` (Q2
-time split), `phases.c` (per-kernel timing), `exp_test.c` (AVX2 exp accuracy),
+`tools/`: `probe.c` (clock, peak FLOPS, bandwidth, caches), `phases.c` (kernel
+time split, `naive` and `tiled` modes), `exp_test.c` (AVX2 exp accuracy),
 `bench.py` (build/run/check), `plots.py` and `make_report.py` (regenerate the
-figures and report from the measured data).
+figures and report from the measured data), `gen_omp.py` (writes `attn_omp.c`
+from `attn_best.c`, so the two share their kernels by construction).
 
 ## Running it
 
